@@ -1,2 +1,2 @@
 # TextEncodersForSELD
-Leveraging Text Encoders for SELD
+Leveraging PRE-TRAINED TEXT ENCODER FOR SOUND EVENT LOCALIZATION AND DETECTION
