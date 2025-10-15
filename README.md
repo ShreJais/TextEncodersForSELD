@@ -2,7 +2,7 @@
 
 <div align=center>
    <h2>
-   Leveraging pre-trained text encoder for Sound Event Localization and Detection
+   Leveraging Pre-Trained Text Encoder for Sound Event Localization and Detection
    </h2>
 </div>
 
