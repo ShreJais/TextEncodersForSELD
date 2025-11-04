@@ -8,8 +8,5 @@
 export PYTHONPATH=$(pwd)
 echo $PYTHONPATH
 
-cd pretraining
-python main.py
-
-cd ../finetuning
+cd ./finetuning
 python main.py
