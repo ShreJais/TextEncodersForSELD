@@ -1,5 +1,10 @@
+librosa==0.10.1
+nara_wpe==0.0.11
 numpy==2.3.4
+opencv_python==4.10.0.84
 pandas==1.5.1
+Pillow==12.0.0
+PyYAML==6.0
 PyYAML==6.0.3
 scipy==1.16.3
 torch==2.6.0
