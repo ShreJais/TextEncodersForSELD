@@ -2,11 +2,12 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
 import itertools, os, time
 from tqdm import tqdm
-
 import pandas as pd
-import utils, metrics
+
+from pretraining import utils, metrics
 
 def optimizer_fn(cfg, params):
     if cfg['optimizer']=='adam':
@@ -17,13 +18,29 @@ def optimizer_fn(cfg, params):
             betas= cfg['optim_conf']['adamw']['betas'], weight_decay= cfg['optim_conf']['adamw']['weight_decay'])
     return optimizer
 
+def pretrained_optimizer_fn(cfg, params):
+    if cfg['optimizer']=='adam':
+        optimizer= torch.optim.Adam(params= params, lr= cfg['pretrained_optim_conf']['adam']['lr'], 
+            betas= cfg['pretrained_optim_conf']['adam']['betas'], weight_decay= cfg['pretrained_optim_conf']['adam']['weight_decay'])
+    elif cfg['optimizer']=='adamw':
+        optimizer= torch.optim.AdamW(params= params, lr= cfg['pretrained_optim_conf']['adamw']['lr'], 
+            betas= cfg['pretrained_optim_conf']['adamw']['betas'], weight_decay= cfg['pretrained_optim_conf']['adamw']['weight_decay'])
+    return optimizer
+
 def get_lrscheduler(cfg, optimizer, trainloader_len):
     if cfg['scheduler']=='cosine':
         lr_scheduler= torch.optim.lr_scheduler.CosineAnnealingLR(optimizer= optimizer, T_max= cfg['max_epochs']*trainloader_len,
             eta_min= cfg['scheduler_conf']['cosine']['eta_ratio']*optimizer.param_groups[0]['lr'], verbose= True)
     else:
-        lr_scheduler= torch.optim.lr_scheduler.MultiStepLR(optimizer= optimizer, milestones= [cfg['max_epochs']//4], gamma= 0.1, verbose= True)
+        milestones= cfg['scheduler_conf']['steplr']['milestones']
+        lr_scheduler= torch.optim.lr_scheduler.MultiStepLR(optimizer= optimizer, milestones= milestones, gamma= 0.1, verbose= True)
     return lr_scheduler
+
+# Embed loss.
+def embedding_loss(pred_emb, target_emb):
+    # mae loss 
+    loss = torch.mean(torch.abs(pred_emb - target_emb))
+    return loss
 
 # Seld loss.
 class SELDLossADPIT(nn.Module):
@@ -115,7 +132,7 @@ class SELDLossADPIT(nn.Module):
         for i in range(n_permutations):
             total_loss+= (accdoa_loss[i]+screen_loss[i])*(min_accdoa_loss_idx==i)
         return total_loss.mean()
-    
+
 def training(cfg, model: nn.Module, dir, summary_writer, train_loader, test_loader, device, best_fscore, start_epoch= 0):
     training_cfg= cfg['TRAINING']
     dataset_cfg= cfg['DATASET']
@@ -123,12 +140,20 @@ def training(cfg, model: nn.Module, dir, summary_writer, train_loader, test_load
     
     # output loss function.
     out_loss_fn= SELDLossADPIT(cfg= cfg)
+
     # seld metrics.
     seld_metrics= metrics.ComputeSeldResults(dataset_cfg= dataset_cfg, metrics_cfg= metrics_cfg, num_classes= dataset_cfg['num_classes'])
 
     # optimizer and lr scheduler.
-    optimizer= optimizer_fn(cfg= training_cfg, params= model.parameters())
-    lr_scheduler= get_lrscheduler(cfg= training_cfg, optimizer= optimizer, trainloader_len= len(train_loader))
+    # define two optimizers and schedulers.
+    
+    optimizer1= pretrained_optimizer_fn(cfg= training_cfg, params= model.pretrained_encoder.parameters())
+    optimizer2= optimizer_fn(cfg= training_cfg, params= model.seld_output.parameters())
+    optimizer= [optimizer1, optimizer2]
+
+    lr_scheduler1= get_lrscheduler(cfg= training_cfg, optimizer= optimizer1, trainloader_len= len(train_loader))
+    lr_scheduler2= get_lrscheduler(cfg= training_cfg, optimizer= optimizer2, trainloader_len= len(train_loader))
+    lr_scheduler= [lr_scheduler1, lr_scheduler2]
 
     if training_cfg['restore_from_checkpoints']:
         print("Loading model weights and optimizer state dict from initial checkpoint.")
@@ -142,13 +167,13 @@ def training(cfg, model: nn.Module, dir, summary_writer, train_loader, test_load
         best_step= model_ckpt['best_step']
 
     loss_weights= training_cfg['loss_weights']
-    
-    # history.
-    train_hist= pd.DataFrame(columns= ['epoch', 'tloss', 'seld_loss'])
-    val_hist= pd.DataFrame(columns= ['epoch', 'tloss', 'seld_loss', 'fscore', 'doa_error', 'dist_error', 'reldist_error'])
 
-    trainstep_hist= pd.DataFrame(columns= ['step', 'tloss', 'seld_loss'])
-    valstep_hist= pd.DataFrame(columns= ['step', 'tloss', 'seld_loss'])
+    # history.
+    train_hist= pd.DataFrame(columns= ['epoch', 'tloss', 'embedding_loss', 'seld_loss'])
+    val_hist= pd.DataFrame(columns= ['epoch', 'tloss', 'embedding_loss', 'seld_loss', 'fscore', 'doa_error', 'dist_error', 'reldist_error'])
+
+    trainstep_hist= pd.DataFrame(columns= ['step', 'tloss', 'embedding_loss', 'seld_loss'])
+    valstep_hist= pd.DataFrame(columns= ['step', 'tloss', 'embedding_loss', 'seld_loss'])
 
     print(f'Starting training for {training_cfg["max_epochs"]} epochs.')
     print(f'Using device: {device}')
@@ -167,22 +192,25 @@ def training(cfg, model: nn.Module, dir, summary_writer, train_loader, test_load
     for epoch in range(start_epoch, training_cfg['max_epochs']):
         epoch_st= time.time()
         trainepoch_hist, _, _, _= train_epoch(cfg= cfg, epoch= epoch, model= model, train_loader= train_loader, 
-            test_loader= test_loader, optimizer= optimizer, lr_scheduler= lr_scheduler, out_loss_fn= out_loss_fn, device= device, val_step= val_step, 
-            valstep_hist= valstep_hist, trainstep_hist= trainstep_hist, best_step= best_step, dir= dir, 
+            val_loader= test_loader, optimizer= optimizer, lr_scheduler= lr_scheduler, out_loss_fn= out_loss_fn, device= device, val_step= val_step, 
+            teststep_hist= valstep_hist, trainstep_hist= trainstep_hist, best_step= best_step, dir= dir, 
             loss_weights= loss_weights)
+        
+        train_hist= pd.concat([train_hist, pd.DataFrame([{'epoch': epoch, 'tloss': trainepoch_hist['tloss'],
+            'seld_loss': trainepoch_hist['seld_loss']}])], ignore_index= True)
+        
+        valepoch_hist, mean_results, class_wise_results= validation_epoch(cfg= cfg, epoch= epoch, model= model, val_loader= test_loader, 
+            out_loss_fn= out_loss_fn, metric= seld_metrics, device= device, out_dir= dir['output_dir'], mode= 'random', loss_weights= loss_weights)
+        
+        lr_scheduler[0].step()  
+        lr_scheduler[1].step()
 
-        train_hist= pd.concat([train_hist, pd.DataFrame([{'epoch': epoch, 'tloss': trainepoch_hist['tloss'],'seld_loss': trainepoch_hist['seld_loss']}])], ignore_index= True)
-        
-        valepoch_hist, mean_results, class_wise_results= validation_epoch(cfg= cfg, epoch= epoch, model= model, val_loader= test_loader, out_loss_fn= out_loss_fn, metric= seld_metrics, device= device, 
-            out_dir= dir['output_dir'], mode= 'random', loss_weights= loss_weights)
-        
         val_hist= pd.concat([val_hist, 
             pd.DataFrame([{'epoch': epoch, 'tloss': valepoch_hist['tloss'], 'seld_loss': valepoch_hist['seld_loss'], 
             'fscore': valepoch_hist['fscore'], 'doa_error': valepoch_hist['doa_error'], 'dist_error': valepoch_hist['dist_error'], 
             'reldist_error': valepoch_hist['reldist_error']}])], ignore_index= True)
         
         epoch_et= time.time()
-
         print(f"Epoch: {epoch+1}/{training_cfg['max_epochs']} | Train -- tloss: {trainepoch_hist['tloss']:.4f} | "
               f"SeldLoss: {trainepoch_hist['seld_loss']:.4f}")
         print(f"Epoch: {epoch+1}/{training_cfg['max_epochs']} | Validation -- tloss: {valepoch_hist['tloss']:.4f} |"
@@ -198,9 +226,8 @@ def training(cfg, model: nn.Module, dir, summary_writer, train_loader, test_load
             model_name= cfg['MODEL']['model_name']
             model_path= os.path.join(dir['checkpoint_dir'], model_name, 'best_fscore_model')
             os.makedirs(model_path, exist_ok= True)
-            save_dict= {'seld_model': model.state_dict(), 'cfg': cfg, 'opt': optimizer.state_dict(), 
-                'epoch': epoch, 'best_fscore': best_fscore, 'best_fscore_epoch': best_fscore_epoch, 
-                'best_epoch': epoch, 'best_step': val_step}
+            save_dict= {'seld_model': model.state_dict(), 'cfg': cfg, 'epoch': epoch, 'best_fscore': best_fscore, 
+                'best_fscore_epoch': best_fscore_epoch, 'best_epoch': epoch, 'best_step': val_step}
             torch.save(save_dict, os.path.join(model_path, 'best_model.pt'))
 
         # model parameters saved based on minimum loss.
@@ -209,21 +236,21 @@ def training(cfg, model: nn.Module, dir, summary_writer, train_loader, test_load
             model_name= cfg['MODEL']['model_name']
             model_path= os.path.join(dir['checkpoint_dir'], model_name, 'best_loss_model')
             os.makedirs(model_path, exist_ok= True)
-            save_dict= {'seld_model': model.state_dict(), 'cfg': cfg, 'opt': optimizer.state_dict(), 
-                'epoch': epoch, 'best_fscore': valepoch_hist['fscore'], 'best_fscore_epoch': epoch, 
-                'best_epoch': epoch, 'best_step': val_step}
+            save_dict= {'seld_model': model.state_dict(), 'cfg': cfg, 'epoch': epoch, 'best_fscore': valepoch_hist['fscore'], 
+                'best_fscore_epoch': epoch, 'best_epoch': epoch, 'best_step': val_step}
             torch.save(save_dict, os.path.join(model_path, 'best_model.pt'))
 
         print_classwise_results(cwr= class_wise_results, metrics_cfg= metrics_cfg, dataset_cfg= dataset_cfg)
 
     train_hist.to_csv(os.path.join(dir['checkpoint_dir'], 'train_hist.csv'))
     val_hist.to_csv(os.path.join(dir['checkpoint_dir'], 'val_hist.csv'))
+
     # trainstep_hist.to_csv(os.path.join(dir['checkpoint_dir'], 'trainstep_hist.csv'))
-    # valstep_hist.to_csv(os.path.join(dir['checkpoint_dir'], 'teststep_hist.csv'))
+    # valstep_hist.to_csv(os.path.join(dir['checkpoint_dir'], 'valstep_hist.csv'))
 
     end_time= time.time()
     print(f'Total time taken: {(end_time-start_time)/60:.2f} minutes.')
-    
+
     # Test the model based on the best fscore.
     best_fscore_model_ckpt= torch.load(os.path.join(dir['checkpoint_dir'], model_name, 'best_fscore_model', 'best_model.pt'), weights_only= False)
     model.load_state_dict(best_fscore_model_ckpt['seld_model'])
@@ -253,112 +280,64 @@ def training(cfg, model: nn.Module, dir, summary_writer, train_loader, test_load
     print_classwise_results(cwr= class_wise_results, metrics_cfg= metrics_cfg, dataset_cfg= dataset_cfg)
 
 
-def train_epoch(cfg, epoch, model, train_loader, test_loader, optimizer, lr_scheduler, out_loss_fn, device, trainstep_hist, valstep_hist, 
+def train_epoch(cfg, epoch, model, train_loader, val_loader, optimizer, lr_scheduler, out_loss_fn, device, trainstep_hist, valstep_hist, 
     dir, loss_weights, mode= 'random', val_step= 0, best_step= 0):
     
+    # Training.
     model.train()
-    epoch_hist= {'tloss': 0, 'seld_loss': 0}
-    tstep_hist= {'tloss': 0, 'seld_loss': 0}
-    # val_iter= iter(test_loader)
+    
+    epoch_hist= {'tloss': 0, 'embedding_loss': 0, 'seld_loss': 0}
+    tstep_hist= {'tloss': 0, 'embedding_loss': 0, 'seld_loss': 0}
 
     t= tqdm(iterable= train_loader, leave= False)
     num_steps= 0
-
+    
     for batch in t:
         event_specs, audio_iv_specs, dist_specs, target_labels, orig_labels, file_names = batch
         event_specs, audio_iv_specs= event_specs.to(device), audio_iv_specs.to(device)
         dist_specs, target_labels, orig_labels= dist_specs.to(device), target_labels.to(device), orig_labels.to(device)
 
         batch_size= event_specs.shape[0]
-        optimizer.zero_grad()
+        optimizer[0].zero_grad()
+        optimizer[1].zero_grad()
+        
+        # get placeholder tokens.
+        prompt_templates, _, _= utils.get_prompt_template(mode= mode, num_template= batch_size, num_frames= 50)
+        encoded_tokens, pos= model.get_placeholder_tokens(prompt_texts= prompt_templates)
+        encoded_tokens, pos= encoded_tokens.to(device), torch.as_tensor(pos).to(device)
 
-        seld_preds= model(audio_specs= event_specs, audio_ivspecs= audio_iv_specs, dist_specs= dist_specs)
+        final_predembeddings, seld_preds= model(audio_specs= event_specs, audio_ivspecs= audio_iv_specs, dist_specs= dist_specs, encoded_tokens= encoded_tokens, pos= pos)
+        final_gtembeddings= model.get_original_label_embeddings(orig_labels= orig_labels, encoded_tokens= encoded_tokens, pos= pos)
+        
+        # compute loss.
+        embed_loss= embedding_loss(pred_emb= final_predembeddings, target_emb= final_gtembeddings)
         seld_loss= out_loss_fn(preds= seld_preds, labels= target_labels)
-        total_loss= loss_weights[1]*seld_loss
+        
+        # total loss
+        total_loss= loss_weights[0]*embed_loss+loss_weights[1]*seld_loss
 
         total_loss.backward()
-        optimizer.step()
-
-        if lr_scheduler is not None:
-            lr_scheduler.step()
+        optimizer[0].step()
+        optimizer[1].step()
 
         num_steps+= 1
         # Update the epoch history.
-        epoch_hist= update_history(hist= epoch_hist, total_loss= total_loss, seld_loss= seld_loss)
-        tstep_hist= update_history(hist= tstep_hist, total_loss= total_loss, seld_loss= seld_loss)
+        epoch_hist= update_history(hist= epoch_hist, total_loss= total_loss, embed_loss= embed_loss, seld_loss= seld_loss)
+        tstep_hist= update_history(hist= tstep_hist, total_loss= total_loss, embed_loss= embed_loss, seld_loss= seld_loss)
+        
         t.set_description(
-            f'Epoch: {epoch+1}, Loss: {epoch_hist["tloss"]/num_steps:.4f}, '  
+            f'Epoch: {epoch+1}, Loss: {epoch_hist["tloss"]/num_steps:.4f}, ' 
+			f'EmbedLoss: {epoch_hist["embedding_loss"]/num_steps:.4f}, ' 
             f'SELD Loss: {epoch_hist["seld_loss"]/num_steps:.4f}')
 
-        # if num_steps%1000==0:
-        #     val_step+= 1
-        #     trainstep_hist= trainstep_hist.append({'step': val_step, 'tloss': tstep_hist['tloss']/1000, 'embedding_loss': tstep_hist['embedding_loss']/1000, 
-        #         'seld_loss': tstep_hist['seld_loss']/1000}, ignore_index= True)
-        #     tstep_hist= {'tloss': 0, 'embedding_loss': 0, 'seld_loss': 0}
-
-        #     step_hist, val_iter= validate_steps(model= model, val_loader= test_loader, out_loss_fn= out_loss_fn, device= device, 
-        #         mode= mode, num_batches= 800, val_iter= val_iter, loss_weights= loss_weights)
-
-        #     teststep_hist= teststep_hist.append({'step': val_step, 'tloss': step_hist['tloss'], 'embedding_loss': step_hist['embedding_loss'], 
-        #         'seld_loss': step_hist['seld_loss']}, ignore_index= True)
-            
-        #     if len(teststep_hist)==1 or step_hist['tloss']< teststep_hist['tloss'].iloc[best_step]:
-        #         best_step= val_step
-        #         model_name= cfg['MODEL']['model_name']
-        #         model_path= os.path.join(dir['checkpoint_dir'], model_name, 'best_step_model')
-        #         os.makedirs(model_path, exist_ok= True)
-        #         save_dict= {'seld_model': model.state_dict(), 'cfg': cfg, 'opt': optimizer.state_dict(), 
-        #             'epoch': epoch, 'best_epoch': epoch, 'best_step': val_step}
-        #         torch.save(save_dict, os.path.join(model_path, 'best_model.pt'))
-        
     for key in epoch_hist.keys():
         epoch_hist[key]/= num_steps
     return epoch_hist, trainstep_hist, valstep_hist, val_step
 
-# def validate_steps(model, val_loader, out_loss_fn, device, loss_weights, mode= 'random', num_batches= 800, val_iter= None):
-#     model.eval()
-#     step_hist= {'tloss': 0, 'embedding_loss': 0, 'seld_loss': 0}
-#     if val_iter is None:
-#         val_iter= iter(val_loader)
-
-#     t= tqdm(iterable= itertools.islice(val_iter, num_batches), leave= False, total= num_batches)
-#     num_steps= 0
-#     with torch.no_grad():
-#         for batch in t:
-#             event_specs, audio_iv_specs, ipd_ild_specs, dist_specs, target_labels, orig_labels, file_names = batch
-#             event_specs, audio_iv_specs, ipd_ild_specs= event_specs.to(device), audio_iv_specs.to(device), ipd_ild_specs.to(device)
-#             dist_specs, target_labels, orig_labels= dist_specs.to(device), target_labels.to(device), orig_labels.to(device)
-            
-#             batch_size= event_specs.shape[0]
-
-#             prompt_templates, _, _= utils.get_prompt_template(mode= mode, num_template= batch_size)
-#             encoded_tokens, pos= model.get_placeholder_tokens(prompt_texts= prompt_templates)
-#             encoded_tokens, pos= encoded_tokens.to(device), torch.as_tensor(pos).to(device)
-
-#             final_predembeddings, seld_preds= model(audio_specs= event_specs, audio_ivspecs= audio_iv_specs, 
-#                 ipd_ildspecs= ipd_ild_specs, dist_specs= dist_specs, encoded_tokens= encoded_tokens, pos= pos)
-#             final_gtembeddings= model.get_original_label_embeddings(orig_labels= orig_labels, encoded_tokens= encoded_tokens, pos= pos)
-
-#             # compute loss.
-#             embed_loss= embedding_loss(pred_emb= final_predembeddings, target_emb= final_gtembeddings, beta= 1/0.07)
-#             seld_loss= out_loss_fn(preds= seld_preds, labels= target_labels)
-#             total_loss= loss_weights[0]*embed_loss+loss_weights[1]*seld_loss
-
-#             # update the history.
-#             num_steps+= 1
-#             step_hist= update_history(hist= step_hist, total_loss= total_loss, embed_loss= embed_loss, seld_loss= seld_loss)
-#             t.set_description(
-#                 f'Loss: {step_hist["tloss"]/num_steps:.4f}, ' 
-# 			    f'EmbedLoss: {step_hist["embedding_loss"]/num_steps:.4f}, ' 
-#                 f'SELD Loss: {step_hist["seld_loss"]/num_steps:.4f}')  
-            
-#     for key in step_hist.keys():
-#         step_hist[key]/= num_batches
-#     return step_hist, val_iter
-
 def validation_epoch(cfg, epoch, model, val_loader, out_loss_fn, metric, device, out_dir, loss_weights, mode= 'random'):
+    # Validation.
     model.eval()
-    epoch_hist= {'tloss': 0, 'seld_loss': 0, 'fscore': 0, 'doa_error': 0, 'dist_error': 0, 'reldist_error': 0}
+    epoch_hist= {'tloss': 0, 'embedding_loss': 0, 'seld_loss': 0, 'fscore': 0, 'doa_error': 0, 'dist_error': 0, 'reldist_error': 0}
     num_steps= 0
     t= tqdm(iterable= val_loader, leave= False)
     
@@ -369,10 +348,17 @@ def validation_epoch(cfg, epoch, model, val_loader, out_loss_fn, metric, device,
             dist_specs, target_labels, orig_labels= dist_specs.to(device), target_labels.to(device), orig_labels.to(device)
 
             batch_size= event_specs.shape[0]
+            prompt_templates, _, _= utils.get_prompt_template(mode= mode, num_template= batch_size, num_frames= 50)
+            encoded_tokens, pos= model.get_placeholder_tokens(prompt_texts= prompt_templates)
+            encoded_tokens, pos= encoded_tokens.to(device), torch.as_tensor(pos).to(device)
 
-            seld_preds= model(audio_specs= event_specs, audio_ivspecs= audio_iv_specs, dist_specs= dist_specs)
+            final_predembeddings, seld_preds= model(audio_specs= event_specs, audio_ivspecs= audio_iv_specs, dist_specs= dist_specs, encoded_tokens= encoded_tokens, pos= pos)
+            final_gtembeddings= model.get_original_label_embeddings(orig_labels= orig_labels, encoded_tokens= encoded_tokens, pos= pos)
+            
+            # compute loss.
+            embed_loss= embedding_loss(pred_emb= final_predembeddings, target_emb= final_gtembeddings, beta= 1/0.07)
             seld_loss= out_loss_fn(preds= seld_preds, labels= target_labels)
-            total_loss= loss_weights[1]*seld_loss
+            total_loss= loss_weights[0]*embed_loss+loss_weights[1]*seld_loss
 
             # save predictions to csv files for metric calculations.
             utils.write_preds_to_dcase_format(preds= seld_preds, dataset_cfg= cfg['DATASET'], metrics_cfg= cfg['METRICS'], 
@@ -380,11 +366,12 @@ def validation_epoch(cfg, epoch, model, val_loader, out_loss_fn, metric, device,
             
             # update the history.
             num_steps+= 1
-            epoch_hist= update_history(hist= epoch_hist, total_loss= total_loss, seld_loss= seld_loss)
+            epoch_hist= update_history(hist= epoch_hist, total_loss= total_loss, embed_loss= embed_loss, seld_loss= seld_loss)
             t.set_description(
                 f'Epoch: {epoch+1}, Loss: {epoch_hist["tloss"]/num_steps:.4f}, ' 
+			    f'EmbedLoss: {epoch_hist["embedding_loss"]/num_steps:.4f}, ' 
                 f'SELD Loss: {epoch_hist["seld_loss"]/num_steps:.4f}')
-
+            
     for key in epoch_hist.keys():
         epoch_hist[key]/= len(val_loader)
 
@@ -396,8 +383,9 @@ def validation_epoch(cfg, epoch, model, val_loader, out_loss_fn, metric, device,
     epoch_hist['reldist_error']= mean_results['reldist_error']
     return epoch_hist, mean_results, class_wise_results
 
-def update_history(hist, total_loss, seld_loss):
+def update_history(hist, total_loss, embed_loss, seld_loss):
 	hist['tloss']+= total_loss.item()
+	hist['embedding_loss']+= embed_loss.item()
 	hist['seld_loss']+= seld_loss.item()
 	return hist
 

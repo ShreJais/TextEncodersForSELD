@@ -1,0 +1,252 @@
+DATASET:
+  modality: audio
+  seed: 42
+  root_dir: '/scratch/sj'
+  feat_dir: '/scratch/sj/S2025_TASK3/features'
+  label_dir: '/scratch/sj/S2025_TASK3/features'
+
+  checkpoint_dir: '/scratch/vb/saved_models'
+  log_dir: 'logs'
+  output_dir: 'outputs'
+
+  sampling_rate: 24000
+  hop_len: 0.02 # 480 samples
+  num_mels: 64
+  audio_normalization: True
+
+  # feature list
+  audio_feats_type: {'audio_spec': 'lr_logmel', 'iv': 'foa_iv_logmel', 'ild': 'ild_logmel', 'ipd': 'ipd_logmel'} 
+  dist_feats_type: {'dlogmel': 'direct_logmel', 'rlogmel': 'reverb_logmel', 'drrlogmel': 'drr_logmel', stpacc: 'stpacc'}
+  feature_normalization: True
+
+  max_polyphony: 3 # tracks for multiaccdoa
+  num_classes: 13
+  label_seq_len: 50 # 5 seconds with 100ms frames
+  
+  multiaccdoa: True
+  thresh_unify: 15
+
+MODEL:
+  model_name: SELD_AudioFull
+  audio_backbone: ResidualCNN8 # CNN8, PatchEmbed, BEATS
+  doa_backbone: ResidualCNN8 # CNN8, PatchEmbed
+  distance_backbone: ResidualCNN8 # CNN8, PatchEmbed
+  decoder: conformer # conformer, transformer
+  audio_proj: FGA512to512
+  doa_proj: FGA512to512
+  distance_proj: FGA512to512  
+  seld_out: 'ffn1' # ffn, transformer
+  audio_normalization: False # experiment for the case of BEATS.
+  time_attention: 'conformer' # transformer, conformer
+
+  num_feats: 3 # if audio_backbone is BEATS num_feats = 3, else num_feats = 4
+  embed_dim: 512
+  case: 3 # 1, 2, 3, 4, 5
+
+  backbone_inch: {0: {'audio': 1, 'audio_iv': 4, 'dist': 5}, # (audio_spec, audio_spec+iv+ild, ipd+d+r+drr)
+                  1: {'audio': 1, 'audio_iv': 4, 'dist': 4}, # (audio_spec, audio_spec+iv+ild, ipd+d+r)
+                  2: {'audio': 1, 'audio_iv': 4, 'dist': 3}, # (audio_spec, audio_spec+iv+ild, ipd+drr)
+                  3: {'audio': 1, 'audio_iv': 4, 'dist': 2}, # (audio_spec, audio_spec+iv+ild, d+r)
+                  4: {'audio': 1, 'audio_iv': 4, 'dist': 3}, # (audio_spec, audio_spec+iv+ild, ipd+stpacc)
+                  5: {'audio': 1, 'audio_iv': 4, 'dist': 3}} # (audio_spec, audio_spec+iv+ild, d+r+stpacc)
+
+  max_polyphony: 3 # tracks for multiaccdoa
+  num_classes: 13
+  label_seq_len: 50
+
+  multiaccdoa: True
+  thresh_unify: 15
+
+  fga_conf:
+    FGA:
+      input_size: 768
+      output_size: 768
+
+    FGA512:
+      input_size: 768
+      output_size: 512
+    
+    FGA512to512:
+      input_size: 512
+      output_size: 512
+
+  pretrain:
+    audio_backbone: ../newACLSSL/pretrained_models/BEATs_iter3_plus_AS2M_finetuned_on_AS2M_cpt2.pt
+    seld: '../seldlm2/saved_models/exp3_audio_multiACCDOA_20250912_020429/SELD_AudioFull'
+    model_type: 'fscore' # fscore
+
+  seld_conf:
+    backbone:
+      CNN8:
+        num_mels: 64
+        c_out: [64, 128, 256, 512] # [64, 64, 128, 128]
+        kernel_size: [3, 3]
+        stride: [1, 1]
+        padding: [1, 1]
+        use_bias: True
+        pool_size: [[5, 2], [1, 2], [1, 2], [1, 2]]
+        pool_type: 'avg'
+      
+      PatchEmbed:
+        num_mels: 64
+        n_mels: 64
+        c_out: 128
+        kernel_size: [5, 16]
+        stride: [5, 16]
+        padding: [0, 0]
+        use_bias: True
+      
+      BEATS:
+        input_patch_size: 16 # patch size of patch embedding.
+        embed_dim: 512 # patch embedding dimension.
+        conv_bias: False #include bias in conv encoder.
+        encoder_layers: 12 # number of encoder layers in the transformer.
+        encoder_embed_dim: 768 # encoder embedding dimension
+        encoder_ffn_embed_dim: 3072 # encoder embedding dimension for FFN
+        encoder_attention_heads: 12 # number of encoder attention heads
+        act_fn: 'gelu' # activation function to use.
+        layer_wise_gradient_decay_ratio: 0.6 # ration for layer-wise gradient decay.
+        layer_norm_first: False # apply layernorm first in the transformer
+        deep_norm: True # apply deep_norm first in the transformer
+
+        # dropouts.
+        dropout_rate: 0.0 # dropout rate for the transformer
+        attention_dropout_rate: 0.0 # dropout rate for attention weights
+        actfn_dropout_rate: 0.0 # dropout rate for activation function in FFN
+        encoderlayer_dropout_rate: 0.05 # dropout rate for dropping a transformer layer
+        input_dropout_rate: 0.0 # dropout rate to apply to the input (after feature extration)
+
+        # positional embeddings.
+        conv_pos: 128 # number of filters for convolutional positional embeddings.
+        conv_pos_groups: 16 # number of groups for convolutonal positional embedding.
+        
+        # relative positional embeddings
+        relative_positional_embedding: True # apply relative position embedding
+        num_buckets: 320 # number of buckets for relative position embedding
+        max_dist: 800 # maximum distance for relative position embedding
+        gru_rel_pos: True # apply gated relative  
+        rescale_init: False
+
+        # label predictor
+        finetuned_model: True
+        predictor_dropout_rate: 0.0
+        predictor_class: 527
+      
+      ResidualCNN8:
+        num_mels: 64
+        c_out: [64, 128, 256, 512]
+        kernel_size: [3, 3]
+        stride: [1, 1]
+        padding: [1, 1]
+        use_bias: True
+        pool_size: [[5, 2], [1, 2], [1, 2], [1, 2]]
+        pool_type: 'avg'
+
+    transformer:
+      num_decoder_layers: 2
+      encoder_dim: 512
+      num_attention_heads: 8
+      ffn_expansion_factor: 2
+      ffn_dropout_rate: 0.1
+      attention_dropout_rate: 0.1
+      use_bias: True
+
+    conformer:
+      num_decoder_layers: 2
+      encoder_dim: 512 # 512
+      num_attention_heads: 8
+      ffn_expansion_factor: 2
+      conv_expansion_factor: 2
+      ffn_dropout_rate: 0.1
+      attention_dropout_rate: 0.1
+      layer_dropout_rate: 0.1
+      conv_dropout_rate: 0.1
+      conv_kernel_size: 31
+      half_step_residual: True
+      use_bias: True
+    
+    decoder:
+      conformer:
+        num_decoder_layers: 4
+        encoder_dim: 512 # 512
+        num_attention_heads: 8
+        ffn_expansion_factor: 2
+        conv_expansion_factor: 2
+        ffn_dropout_rate: 0.1
+        attention_dropout_rate: 0.1
+        layer_dropout_rate: 0.1
+        conv_dropout_rate: 0.1
+        conv_kernel_size: 31
+        half_step_residual: True
+        use_bias: True
+      
+      transformer:
+        num_decoder_layers: 4
+        encoder_dim: 512
+        num_attention_heads: 8
+        ffn_expansion_factor: 4
+        ffn_dropout_rate: 0.1
+        attention_dropout_rate: 0.1
+        use_bias: True
+    
+    output:
+      ffn:
+        num_ffn_layers: 0
+        ffn_indim: 1536
+        ffn_outdim: 512
+        use_bias: True
+        dropout_rate: 0.1
+        max_polyphony: 3
+        num_classes: 13
+
+      transformer:
+        num_decoder_layers: 6
+        encoder_dim: 512
+        num_attention_heads: 8
+        ffn_expansion_factor: 4
+        ffn_dropout_rate: 0.1
+        attention_dropout_rate: 0.1
+
+TRAINING:
+  exp_name: 'exp2'
+  restore_from_checkpoints: False
+  initial_checkpoints: '/saved_models/'
+  max_epochs: 100
+  train_batch_size: 8
+  test_batch_size: 8
+  input_resolution: [176, 352]
+  num_workers: 10
+  template_mode: 'random'
+
+  dev_train_folds: ['fold1', 'fold3']
+  dev_test_folds: ['fold4']
+
+  loss_weights: [1, 1]
+  optimizer: 'adam'
+  scheduler: 'cosine'
+  amp: False
+  amp_dtype: 'float32'
+  clip_grad_norm: 5
+  
+  optim_conf:
+    adam:
+      lr: 0.0001
+      betas: [0.9, 0.999]
+      weight_decay: 0.0001
+    adamw:
+      lr: 0.0001
+      betas: [0.9, 0.999]
+      weight_decay: 0.0001
+
+  scheduler_conf:
+    cosine:
+      eta_ratio: 0.0
+    
+METRICS:
+  average: 'macro' # Supports 'micro': sample-wise average and 'macro': class-wise average.
+  segment_based_metrics: False  # If True, uses segment-based metrics, else uses event-based metrics.
+  doa_threshold: 20  # DOA error threshold for computing the detection metrics.
+  dist_threshold: 'inf' # Absolute distance error threshold for computing the detection metrics.
+  reldist_threshold: 1 # Relative distance error threshold for computing the detection metrics.
+  req_onscreen: False
+  use_jackknife: False

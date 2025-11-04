@@ -3,7 +3,13 @@
 #SBATCH -n 10
 #SBATCH --gres=gpu:1
 #SBATCH --mem-per-cpu=2G
-#SBATCH --time=4-00:00:00
 #SBATCH -w gnode087
 
+export PYTHONPATH=$(pwd)
+echo $PYTHONPATH
+
+cd pretraining
+python main.py
+
+cd ../finetuning
 python main.py
