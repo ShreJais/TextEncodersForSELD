@@ -36,8 +36,8 @@ These embeddings are inserted into randomly sampled natural language templates a
 Components Description:
    * Tokenizer: 
       * This module consists: a source tokenzier for capturing the source event name, a DOA tokenzier for capturing the direction of arrival, and a distance tokenzier for capturing the source range. 
-      * Each tokenizer has a feature encoder layer followed by a projection layer. 
-      * To encode event-identity features ($\mathbf{X}_{\text{src}}$), we explore two alternatives for the source encoder ($\mathbf{E}_{\text{src}}$): \
+      * Each tokenizer has a feature encoder layer followed by a projection layer.
+      * To encode event-identity features ($X_{\text{src}}$), we explore two alternatives for the source encoder ($\mathbf{E}_{\text{src}}$): \
          (i) BEATs: a transformer-based network BEATs pre-trained in self-supervised manner and \
          (ii) RCC: a Residual-based CNN-Conformer network.
       * Directional ($\mathbf{E}_\text{doa}$) and distance ($\mathbf{E}_\text{dist}$) encoders are based on the RCC network.
@@ -84,6 +84,7 @@ $$
    L_\text{EMBED} = || \mathbf{E}_\text{text}(\mathbf{X}_\text{gt}) - \mathbf{A} ||_1, \\
    L_\text{TOTAL} = \lambda_\text{EMBED} L_\text{EMBED} + \lambda_\text{ADPIT} L_\text{ADPIT},
 $$
+
 where the hyperparameters $\lambda_\text{EMBED}$ and $\lambda_\text{ADPIT}$ balance the two terms. In our implementation, the per output regression term inside ADPIT is the mean squared error (MSE) over DOA and distance predictions.
 </blockquote>
 
