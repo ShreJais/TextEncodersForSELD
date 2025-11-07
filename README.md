@@ -77,11 +77,9 @@ Overall Configurations: A total of $8$ model configurations are evaluated, forme
 
 
 ## Loss functions
-<blockquote>
-The model is trained in a supervised manner with two objectives: \
-   (i) aligning the audio-driven embeddings ($\mathbf{A}$) with the ground-truth text embeddings ($E_\text{text}(X_\text{gt})$), and \
-   (ii) predicting active source, DOA and distance in the multi-ACCDOA format.
-   
-The mean absolute error (MAE) is used to align the audio-driven embeddings with ground-truth text embedding, and the Auxiliary Duplicating Permutation Invariant Training (ADPIT) loss ($L_\text{ADPIT}$) for multi-track activity/DOA/distance prediction. In our implementation, the per output regression term inside ADPIT is the mean squared error (MSE) over DOA and distance predictions.
-</blockquote>
+> The model is trained in a supervised manner with two objectives:  
+      (i) aligning the audio-driven embeddings ($\mathbf{A}$) with the ground-truth text embeddings ($E_\text{text}(X_\text{gt})$), and \
+      (ii) predicting active source, DOA and distance in the multi-ACCDOA format. \
+> The mean absolute error (MAE) is used to align the audio-driven embeddings with ground-truth text embedding, and the Auxiliary Duplicating Permutation Invariant Training (ADPIT) loss ($L_\text{ADPIT}$) for multi-track activity/DOA/distance prediction. In our implementation, the per output regression term inside ADPIT is the mean squared error (MSE) over DOA and distance predictions.
+
 
