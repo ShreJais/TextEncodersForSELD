@@ -42,7 +42,7 @@ Components Description:
          (ii) RCC: a Residual-based CNN-Conformer network.
       * Directional ($E_\text{doa}$) and distance ($E_\text{dist}$) encoders are based on the RCC network.
       * BEATs: CNN kernel size and stride is modified to $(5, 16)$; we train the weights of CNN and projection head, while keeping the transfomer block frozen.
-      * RCC: Comprises of $4$ CNN blocks with residual connections, followed by $2$ conformer blocks; Each CNN blocks comprises of main branch with two CNN-BN-ReLU layer (kernel size $(3, 3)$) and a single CNN-BN layer (kernel size $(1, 1)$) in a residual branch; their outputs are summed and followed by average pooling.
+      * RCC: Comprises of $4$ CNN blocks with residual connections, followed by $2$ conformer blocks; Each CNN blocks comprises of main branch with two CNN-BN-ReLU layer (kernel size: $(3, 3)) and a single CNN-BN layer (kernel size: $(1, 1)$) in a residual branch; their outputs are summed and followed by average pooling.
       * Additionally, a shared component comprising two conformer blocks is employed as a multi-feature attention layer. This layer jointly process the intermediate source, DOA, and distance features when $E_\text{src}$ is RCC; otherwise, it operates only on the DOA and distance features.
       * Segment embeddings are added to each features prior to the multi-feature attention block.
       * The resulting outputs are then passed through respective projection layers, $P_\text{audio}$, $P_\text{doa}$ and $P_\text{dist}$. Each projection layer consists of MLP followed by an attentive pooling layer. The dimension of the output of each projection layer is $\text{embed-dim} = 512$.
@@ -76,15 +76,13 @@ Overall Configurations: A total of $8$ model configurations are evaluated, forme
 <blockquote>
 
 The model is trained in a supervised manner with two objectives: \
-      (i) aligning the audio-driven embeddings ($\mathbf{A}$) with the ground-truth text embeddings ($E_\text{text}(X_\text{gt})$), and \
-      (ii) predicting active source, DOA and distance in the multi-ACCDOA format. 
+   (i) aligning the audio-driven embeddings ($\mathbf{A}$) with the ground-truth text embeddings ($E_\text{text}(X_\text{gt})$), and \
+   (ii) predicting active source, DOA and distance in the multi-ACCDOA format.
    
 The mean absolute error (MAE) is used to align the audio-driven embeddings with ground-truth text embedding, and the Auxiliary Duplicating Permutation Invariant Training (ADPIT) loss ($L_\text{ADPIT}$) for multi-track activity/DOA/distance prediction. Mathematically, 
 $$
-   L_\text{EMBED} = || \mathbf{E}_\text{text}(\mathbf{X}_\text{gt}) - \mathbf{A} ||_1
-$$
-$$
-   L_\text{TOTAL} = \lambda_\text{EMBED} L_\text{EMBED} + \lambda_\text{ADPIT} L_\text{ADPIT},
+   L_\text{ADPIT} = || \mathbf{A} - \mathbf{E}_\text{text}(\mathbf{X}_\text{gt}) ||_1, \\
+   L_\text{TOTAL} = \lambda_\text{EMBED} L_\text{EMBED} + \lambda_\text{ADPIT} L_\text{ADPIT}
 $$
 
 where the hyperparameters $\lambda_\text{EMBED}$ and $\lambda_\text{ADPIT}$ balance the two terms. In our implementation, the per output regression term inside ADPIT is the mean squared error (MSE) over DOA and distance predictions.
