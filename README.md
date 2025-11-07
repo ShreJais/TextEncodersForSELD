@@ -129,7 +129,7 @@ $ sbatch finetune_sbatch.sh
 ```
 
 ## Results
-> We present a comparison between the the baseline and the proposed framework across eight different model configurations using offcial metrics. It includes -- the class and location-dependent F1 score ($F_{20^\circ/1}$), the class-dependent DOA error ($DOAE$), and the class-dependent relative distance error ($RDE$). The detection threshold are set to $20^\circ$ for DOA and $1$m for relative distance. All metrics are computed at the frame-level for each class independently and then averaged across the number of classes. 
+> We present a comparison between the the baseline and the proposed framework across eight different model configurations using offcial metrics. It includes -- the class and location-dependent F1 score ($F_{20^\circ/1}$), the class-dependent DOA error ($DOAE$), and the class-dependent relative distance error ($RDE$). The detection threshold are set to $20^\circ$ for DOA and 1m for relative distance. All metrics are computed at the frame-level for each class independently and then averaged across the number of classes. 
 
 > Performance comparison between the baseline and the proposed framework across 8 model configurations, defined by the choice of source encoder (E_src), text encoder (E_text), and prediction head (FFN).
 
