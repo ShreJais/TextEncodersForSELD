@@ -42,7 +42,7 @@ Components Description:
          (ii) RCC: a Residual-based CNN-Conformer network.
       * Directional ($E_\text{doa}$) and distance ($E_\text{dist}$) encoders are based on the RCC network.
       * BEATs: CNN kernel size and stride is modified to $(5, 16)$; we train the weights of CNN and projection head, while keeping the transfomer block frozen.
-      * RCC: Comprises of $4$ CNN blocks with residual connections, followed by $2$ conformer blocks; Each CNN blocks comprises of main branch with two CNN-BN-ReLU layer (kernel size: $(3, 3)) and a single CNN-BN layer (kernel size: $(1, 1)$) in a residual branch; their outputs are summed and followed by average pooling.
+      * RCC: Comprises of $4$ CNN blocks with residual connections, followed by $2$ conformer blocks; Each CNN blocks comprises of main branch with two CNN-BN-ReLU layer (kernel size: $(3, 3)$) and a single CNN-BN layer (kernel size: $(1, 1)$) in a residual branch; their outputs are summed and followed by average pooling.
       * Additionally, a shared component comprising two conformer blocks is employed as a multi-feature attention layer. This layer jointly process the intermediate source, DOA, and distance features when $E_\text{src}$ is RCC; otherwise, it operates only on the DOA and distance features.
       * Segment embeddings are added to each features prior to the multi-feature attention block.
       * The resulting outputs are then passed through respective projection layers, $P_\text{audio}$, $P_\text{doa}$ and $P_\text{dist}$. Each projection layer consists of MLP followed by an attentive pooling layer. The dimension of the output of each projection layer is $\text{embed-dim} = 512$.
@@ -72,14 +72,35 @@ Overall Configurations: A total of $8$ model configurations are evaluated, forme
 
 </blockquote>
 
-
-
-
-
 ## Loss functions
 > The model is trained in a supervised manner with two objectives:  
       (i) aligning the audio-driven embeddings ($\mathbf{A}$) with the ground-truth text embeddings ($E_\text{text}(X_\text{gt})$), and \
       (ii) predicting active source, DOA and distance in the multi-ACCDOA format. \
 > The mean absolute error (MAE) is used to align the audio-driven embeddings with ground-truth text embedding, and the Auxiliary Duplicating Permutation Invariant Training (ADPIT) loss ($L_\text{ADPIT}$) for multi-track activity/DOA/distance prediction. In our implementation, the per output regression term inside ADPIT is the mean squared error (MSE) over DOA and distance predictions.
 
+## Input Features
+> We compute,  
+   (a) Spectrograms of both channels (stereo-format audio data) -- information about the source event \
+   (b) Inter-channel level difference (ILD) -- information about the DOA \
+   (c) Intensity vectors along the y-axis ($\text{IV}_\text{y}$) -- information about the DOA \
+   (d) Spectrograms of direct and reverberant components -- information about the distance 
+
+> To extract these features, we use the following steps:
+```
+$ cd features
+$ python feature_extraction.py  # run it for extracting required features
+$ python helper.py  # run it for putting the multiple features into a single file to avoid multiple input output operations while training the model   
+```
+
+## Ground-truth text generation
+> The dataset annotations are converted into structured natural language descriptions. Each sound event at a given temporal frame is represented by its event class, azimuth angle and source distance. These values are inserted into the placeholder positions of predefined templates (e.g. 'The sound of `<SRC>` comes from direction `<DOA>`, approximately `<DIST>` away'). The placeholder template are randomly sampled from predefined set to introduce variations in the textual representations.
+
+The following examples illustrate how random placeholder templates are converted into ground-truth textual descriptions used for supervision.
+
+| **# Sources** | **Placeholder Template**                                                                                          | **Generated Ground Truth Text**                                                                                                                                                                             |
+| :-----------: | ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|     **0**     | The sonic impression of `<SRC>` originates from direction `<DOA>`, nearly `<DIST>` distant.                       | No audible sources are detected in the environment.                                                                                                                                                         |
+|     **1**     | The sound of `<SRC>` comes from direction `<DOA>`, approximately `<DIST>` away.                                   | The sound of **man** comes from direction **30°**, approximately **3.5 m** away.                                                                                                                            |
+|     **2**     | The captured audio of `<SRC>` is localized at direction `<DOA>`, about `<DIST>` away.                             | The captured audio of **man** and **woman** is localized at directions **−60°** and **80°**, about **3 m** and **5 m** away, respectively.                                                                  |
+|     **3**     | The acoustic presence of `<SRC>` is acoustically detected from direction `<DOA>`, approximately `<DIST>` distant. | The acoustic presence of **footsteps**, **door**, and **knock** is acoustically detected from directions **40°**, **−80°**, and **10°**, approximately **3 m**, **4 m**, and **5 m** distant, respectively. |
 
