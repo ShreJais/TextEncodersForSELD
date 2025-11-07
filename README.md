@@ -37,7 +37,7 @@ Components Description:
    * Tokenizer: 
       * This module consists: a source tokenzier for capturing the source event name, a DOA tokenzier for capturing the direction of arrival, and a distance tokenzier for capturing the source range. 
       * Each tokenizer has a feature encoder layer followed by a projection layer. 
-      * To encode event-identity features ($\mathbf{X}_\text{src}$), we explore two alternatives for the source encoder ($\mathbf{E}_\text{src}$): \
+      * To encode event-identity features ($\mathbf{X}_{\text{src}}$), we explore two alternatives for the source encoder ($\mathbf{E}_{\text{src}}$): \
          (i) BEATs: a transformer-based network BEATs pre-trained in self-supervised manner and \
          (ii) RCC: a Residual-based CNN-Conformer network.
       * Directional ($\mathbf{E}_\text{doa}$) and distance ($\mathbf{E}_\text{dist}$) encoders are based on the RCC network.
@@ -45,9 +45,9 @@ Components Description:
       * RCC: Comprises of $4$ CNN blocks with residual connections, followed by $2$ conformer blocks; Each CNN blocks comprises of main branch with two CNN-BN-ReLU layer (kernel size $(3, 3)$) and a single CNN-BN layer (kernel size $(1, 1)$) in a residual branch; their outputs are summed and followed by average pooling.
       * Additionally, a shared component comprising two conformer blocks is employed as a multi-feature attention layer. This layer jointly process the intermediate source, DOA, and distance features when $\mathbf{E}_\text{src}$ is RCC; otherwise, it operates only on the DOA and distance features.
       * Segment embeddings are added to each features prior to the multi-feature attention block.
-      * The resulting outputs are then passed through respective projection layers, $\mathbf{P}_\text{audio}$, $\mathbf{P}_\text{doa}$ and $\mathbf{P}_\text{dist}$. Each projection layer consists of MLP followed by an attentive pooling layer. The dimension of the output of each projection layer is $\text{embed}\_\text{dim} = 512$.
+      * The resulting outputs are then passed through respective projection layers, $\mathbf{P}_\text{audio}$, $\mathbf{P}_\text{doa}$ and $\mathbf{P}_\text{dist}$. Each projection layer consists of MLP followed by an attentive pooling layer. The dimension of the output of each projection layer is $\text{embed-dim} = 512$.
    * Text encoder:
-      * We explore two distinct frozen pre-trained text encoders: CLIP and BERT ($\text{embed}\_\text{dim} = 512$).
+      * We explore two distinct frozen pre-trained text encoders: CLIP and BERT ($\text{embed-dim} = 512$).
       * Processes structured text templates containing token embeddings.
    * SELD prediction head: 
       * 2 variants:
