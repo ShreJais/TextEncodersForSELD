@@ -90,6 +90,7 @@ Overall Configurations: A total of $8$ model configurations are evaluated, forme
 > To extract these features, follow the below steps:
 ```
 $ cd features
+$ vi config.yml # to change the path in DATASET.
 $ python feature_extraction.py  # run it for extracting required features
 $ python helper.py  # run it for putting the multiple features into a single file to avoid multiple input output operations while training the model   
 ```
@@ -106,25 +107,40 @@ The following examples illustrate how random placeholder templates are converted
 |     **2**     | The captured audio of `<SRC>` is localized at direction `<DOA>`, about `<DIST>` away.                             | The captured audio of **man** and **woman** is localized at directions **−60°** and **80°**, about **3 m** and **5 m** away, respectively.                                                                  |
 |     **3**     | The acoustic presence of `<SRC>` is acoustically detected from direction `<DOA>`, approximately `<DIST>` distant. | The acoustic presence of **footsteps**, **door**, and **knock** is acoustically detected from directions **40°**, **−80°**, and **10°**, approximately **3 m**, **4 m**, and **5 m** distant, respectively. |
 
-## Implementation details (Code)
+## Implementation details (training)
 
+> we first train two separate tokenizer modules: one with BEATs and the other with RCC as the source encoder ($\mathbf{E}_\text{src}$), while keeping the encoders ($\mathbf{E}_\text{doa}$, $\mathbf{E}_\text{dist}$) as RCC. \
+> The training is performed for $100$ epochs with a batch size of $8$, optimizing the ADPIT loss ($L_\text{ADPIT}$) using the Adam optimizer with learning rate of $10^{-4}$. \
+```
+$ cd pretraining 
+$ vi config.yml # to change the path in DATASET and do changes in the model configurations..
+$ python models.py # to look the summary and components used in the model.
+$ cd ../
+$ sbatch pretrain_sbatch.sh
+```
 
+> All eight possible model configurations—resulting from the combination of two source encoders, two frozen text encoders, and two prediction heads - are trained for $50$ epochs with a batch size of $8$, optimizing the $L_\text{TOTAL}$. The Adam optimizer is used with separate learning rates for pretrained weights ($10^{-6}$) and newly initialized weights ($10^{-4}$). The loss weights are set as $\lambda_\text{EMBED} = 0.01$ and $\lambda_\text{ADPIT} = 1$.
+```
+$ cd finetuning
+$ vi config.yml # to change the configurations of source encoder, text encoder, and predictio head for every possible model configuration.
+$ python models.py # to look the summary and components used in the model.
+$ cd ../
+$ sbatch finetune_sbatch.sh
+```
 
 ## Results
 > We present a comparison between the the baseline and the proposed framework across eight different model configurations using offcial metrics. It includes -- the class and location-dependent F$1$ score ($F_{20^\circ/1}$), the class-dependent DOA error ($DOAE$), and the class-dependent relative distance error ($RDE$). The detection threshold are set to $20^\circ$ for DOA and $1m$ for relative distance. All metrics are computed at the frame-level for each class independently and then averaged across the number of classes. 
 
 > Performance comparison between the baseline and the proposed framework across 8 model configurations, defined by the choice of source encoder (E_src), text encoder (E_text), and prediction head (FFN).
 
-      | **Models**            | **F<sub>20°/1</sub> (%)** | **DOAE (°)** | **RDE (%)** |
-      | :-------------------- | :-----------------------: | :----------: | :---------: |
-      | Baseline [[1]]        |            22.8           |     24.5     |     41.0    |
-      | **BEATs-CLIP-GREP**   |           33.63           |   **17.14**  |    40.48    |
-      | **BEATs-BERT-GREP**   |           31.80           |     17.56    |  **32.42**  |
-      | **RCC-CLIP-GREP**     |         **33.81**         |     17.81    |    38.20    |
-      | **RCC-BERT-GREP**     |           32.92           |     18.83    |    33.52    |
-      | **BEATs-CLIP-TREP**   |           31.45           |     19.09    |    32.64    |
-      | **BEATs-BERT-TREP**   |           29.92           |     19.44    |    35.50    |
-      | **RCC-CLIP-TREP**     |           31.42           |     19.68    |    32.50    |
-      | **RCC-BERT-TREP**     |           28.86           |     19.89    |    36.01    |
-
-
+   | **Models**            | **F<sub>20°/1</sub> (%)** | **DOAE (°)** | **RDE (%)** |
+   | :-------------------- | :-----------------------: | :----------: | :---------: |
+   | Baseline         |            22.8           |     24.5     |     41.0    |
+   | **BEATs-CLIP-GREP**   |           33.63           |   **17.14**  |    40.48    |
+   | **BEATs-BERT-GREP**   |           31.80           |     17.56    |  **32.42**  |
+   | **RCC-CLIP-GREP**     |         **33.81**         |     17.81    |    38.20    |
+   | **RCC-BERT-GREP**     |           32.92           |     18.83    |    33.52    |
+   | **BEATs-CLIP-TREP**   |           31.45           |     19.09    |    32.64    |
+   | **BEATs-BERT-TREP**   |           29.92           |     19.44    |    35.50    |
+   | **RCC-CLIP-TREP**     |           31.42           |     19.68    |    32.50    |
+   | **RCC-BERT-TREP**     |           28.86           |     19.89    |    36.01    |
