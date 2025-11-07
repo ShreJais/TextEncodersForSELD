@@ -109,8 +109,8 @@ The following examples illustrate how random placeholder templates are converted
 
 ## Implementation details (training)
 
-> we first train two separate tokenizer modules: one with BEATs and the other with RCC as the source encoder ($\mathbf{E}_\text{src}$), while keeping the encoders ($\mathbf{E}_\text{doa}$, $\mathbf{E}_\text{dist}$) as RCC. \
-> The training is performed for $100$ epochs with a batch size of $8$, optimizing the ADPIT loss ($L_\text{ADPIT}$) using the Adam optimizer with learning rate of $10^{-4}$. \
+> We first train two separate tokenizer modules: one with BEATs and the other with RCC as the source encoder ($E_\text{src}$), while keeping the encoders ($E_\text{doa}$, $E_\text{dist}$) as RCC. \
+> The training is performed for $100$ epochs with a batch size of 8, optimizing the ADPIT loss ($L_\text{ADPIT}$) using the Adam optimizer with learning rate of 0.0001. \
 ```
 $ cd pretraining 
 $ vi config.yml # to change the path in DATASET and do changes in the model configurations..
@@ -119,7 +119,7 @@ $ cd ../
 $ sbatch pretrain_sbatch.sh
 ```
 
-> All eight possible model configurations—resulting from the combination of two source encoders, two frozen text encoders, and two prediction heads - are trained for $50$ epochs with a batch size of $8$, optimizing the $L_\text{TOTAL}$. The Adam optimizer is used with separate learning rates for pretrained weights ($10^{-6}$) and newly initialized weights ($10^{-4}$). The loss weights are set as $\lambda_\text{EMBED} = 0.01$ and $\lambda_\text{ADPIT} = 1$.
+> All eight possible model configurations—resulting from the combination of two source encoders, two frozen text encoders, and two prediction heads - are trained for $50$ epochs with a batch size of 8, optimizing the $L_\text{TOTAL}$. The Adam optimizer is used with separate learning rates for pretrained weights ($10^{-6}$) and newly initialized weights ($10^{-4}$). The loss weights are set as $\lambda_\text{EMBED} = 0.01$ and $\lambda_\text{ADPIT} = 1$.
 ```
 $ cd finetuning
 $ vi config.yml # to change the configurations of source encoder, text encoder, and predictio head for every possible model configuration.
