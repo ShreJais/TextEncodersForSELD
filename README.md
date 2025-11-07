@@ -110,7 +110,7 @@ The following examples illustrate how random placeholder templates are converted
 ## Implementation details (training)
 
 > We first train two separate tokenizer modules: one with BEATs and the other with RCC as the source encoder ($E_\text{src}$), while keeping the encoders ($E_\text{doa}$, $E_\text{dist}$) as RCC. \
-> The training is performed for $100$ epochs with a batch size of 8, optimizing the ADPIT loss ($L_\text{ADPIT}$) using the Adam optimizer with learning rate of 0.0001. \
+> The training is performed for $100$ epochs with a batch size of 8, optimizing the ADPIT loss ($L_\text{ADPIT}$) using the Adam optimizer with learning rate of 0.0001. 
 ```
 $ cd pretraining 
 $ vi config.yml # to change the path in DATASET and do changes in the model configurations..
@@ -129,7 +129,7 @@ $ sbatch finetune_sbatch.sh
 ```
 
 ## Results
-> We present a comparison between the the baseline and the proposed framework across eight different model configurations using offcial metrics. It includes -- the class and location-dependent F$1$ score ($F_{20^\circ/1}$), the class-dependent DOA error ($DOAE$), and the class-dependent relative distance error ($RDE$). The detection threshold are set to $20^\circ$ for DOA and $1m$ for relative distance. All metrics are computed at the frame-level for each class independently and then averaged across the number of classes. 
+> We present a comparison between the the baseline and the proposed framework across eight different model configurations using offcial metrics. It includes -- the class and location-dependent F1 score ($F_{20^\circ/1}$), the class-dependent DOA error ($DOAE$), and the class-dependent relative distance error ($RDE$). The detection threshold are set to $20^\circ$ for DOA and $1$m for relative distance. All metrics are computed at the frame-level for each class independently and then averaged across the number of classes. 
 
 > Performance comparison between the baseline and the proposed framework across 8 model configurations, defined by the choice of source encoder (E_src), text encoder (E_text), and prediction head (FFN).
 
