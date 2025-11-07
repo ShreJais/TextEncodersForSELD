@@ -83,9 +83,11 @@ Overall Configurations: A total of $8$ model configurations are evaluated, forme
    (a) Spectrograms of both channels (stereo-format audio data) -- information about the source event \
    (b) Inter-channel level difference (ILD) -- information about the DOA \
    (c) Intensity vectors along the y-axis ($\text{IV}_\text{y}$) -- information about the DOA \
-   (d) Spectrograms of direct and reverberant components -- information about the distance 
+   (d) Spectrograms of direct and reverberant components -- information about the distance. 
 
-> To extract these features, we use the following steps:
+> Audio spectrograms were computed using STFT with a $1024$-point Hann window and hop size of $480$ samples. At a sampling rate of $24$ kHz, this setup yields $250$ temporal frames for each $5$-second input clip. From these spectrograms, ILD is computed, while IVy is obtained from the FOA components ($W$ and $Y$). Direct and reverberant spectrograms are computed after separating the direct and reverberant components and applying STFT to both components. Finally, all features are projected onto $64$ mel-frequency bins. 
+ 
+> To extract these features, follow the below steps:
 ```
 $ cd features
 $ python feature_extraction.py  # run it for extracting required features
@@ -103,4 +105,26 @@ The following examples illustrate how random placeholder templates are converted
 |     **1**     | The sound of `<SRC>` comes from direction `<DOA>`, approximately `<DIST>` away.                                   | The sound of **man** comes from direction **30°**, approximately **3.5 m** away.                                                                                                                            |
 |     **2**     | The captured audio of `<SRC>` is localized at direction `<DOA>`, about `<DIST>` away.                             | The captured audio of **man** and **woman** is localized at directions **−60°** and **80°**, about **3 m** and **5 m** away, respectively.                                                                  |
 |     **3**     | The acoustic presence of `<SRC>` is acoustically detected from direction `<DOA>`, approximately `<DIST>` distant. | The acoustic presence of **footsteps**, **door**, and **knock** is acoustically detected from directions **40°**, **−80°**, and **10°**, approximately **3 m**, **4 m**, and **5 m** distant, respectively. |
+
+## Implementation details (Code)
+
+
+
+## Results
+> We present a comparison between the the baseline and the proposed framework across eight different model configurations using offcial metrics. It includes -- the class and location-dependent F$1$ score ($F_{20^\circ/1}$), the class-dependent DOA error ($DOAE$), and the class-dependent relative distance error ($RDE$). The detection threshold are set to $20^\circ$ for DOA and $1m$ for relative distance. All metrics are computed at the frame-level for each class independently and then averaged across the number of classes. 
+
+> Performance comparison between the baseline and the proposed framework across 8 model configurations, defined by the choice of source encoder (E_src), text encoder (E_text), and prediction head (FFN).
+
+      | **Models**            | **F<sub>20°/1</sub> (%)** | **DOAE (°)** | **RDE (%)** |
+      | :-------------------- | :-----------------------: | :----------: | :---------: |
+      | Baseline [[1]]        |            22.8           |     24.5     |     41.0    |
+      | **BEATs-CLIP-GREP**   |           33.63           |   **17.14**  |    40.48    |
+      | **BEATs-BERT-GREP**   |           31.80           |     17.56    |  **32.42**  |
+      | **RCC-CLIP-GREP**     |         **33.81**         |     17.81    |    38.20    |
+      | **RCC-BERT-GREP**     |           32.92           |     18.83    |    33.52    |
+      | **BEATs-CLIP-TREP**   |           31.45           |     19.09    |    32.64    |
+      | **BEATs-BERT-TREP**   |           29.92           |     19.44    |    35.50    |
+      | **RCC-CLIP-TREP**     |           31.42           |     19.68    |    32.50    |
+      | **RCC-BERT-TREP**     |           28.86           |     19.89    |    36.01    |
+
 
